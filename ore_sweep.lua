@@ -81,6 +81,16 @@ local DEF = {
 }
 local C = getgenv().OreSweepConfig
 for k, v in pairs(DEF) do if C[k] == nil then C[k] = v end end
+-- Bảng con ("Ores", "Combine") là DANH SÁCH TRẮNG: ghi ["Ores"]={Rainbow=true} nghĩa là CHỈ farm Rainbow,
+-- các loại không ghi coi như tắt (không lấy mặc định). Đổi lại, gõ sai tên thì cảnh báo ngay - trước đây
+-- "Saphire" chỉ im lặng rồi bot đứng không hiểu vì sao. Dòng log "Start." luôn liệt kê loại đang bật.
+for _, sub in ipairs({ "Ores", "Combine" }) do
+    if type(C[sub]) == "table" and type(DEF[sub]) == "table" then
+        for k in pairs(C[sub]) do
+            if DEF[sub][k] == nil then warn(("[OreSweep] %s: không có mục %q (gõ sai tên?)"):format(sub, tostring(k))) end
+        end
+    end
+end
 if type(C["Stop Key"]) == "string" then local ok, e = pcall(function() return Enum.KeyCode[C["Stop Key"]] end) C["Stop Key"] = ok and e or Enum.KeyCode.P end
 
 -- ------------------------------------------------------------
@@ -323,24 +333,22 @@ end
 
 -- Bảng loại quặng: tên hiển thị -> module Directory, để tính "giây/cục" cho UI kể cả khi mine chưa có loại đó
 local ORE_ORDER = { "Sapphire", "Ruby", "Emerald", "Amethyst", "Rainbow" }
+local oreSample = setmetatable({}, { __mode = "v" }) -- [id] = 1 block đang load, để tính giây/cục
+local secNeeded -- khai báo trước: OreSec (ngay dưới) dùng, còn thân hàm nằm phía sau
 local ORE_DIR = {
     Sapphire = "Ore 1 | Sapphire", Ruby = "Ore 2 | Ruby", Emerald = "Ore 3 | Emerald",
     Amethyst = "Ore 4 | Amethyst", Rainbow = "Ore 5 | Rainbow", Quartz = "Ore 6 | Quartz",
 }
-local oreSecCache = {}
+-- "giây/cục" cho UI. BẮT BUỘC tính từ block THẬT đang load (đúng đường secNeeded/Mine dùng).
+-- Bản cũ require thẳng RS.__DIRECTORY.Blocks[...] (module thô, chưa qua Directory của game) -> sai nặng:
+-- UI ghi Amethyst 2793 s / Rainbow 11173 s trong khi đo thật là 20.1 s / 80.7 s, lại còn gắn "!" như thể bị bỏ qua (VERIFIED 23/09).
+-- Chưa thấy loại đó trong mine thì trả nil và UI ghi "—", thà không biết còn hơn báo số sai.
 local function OreSec(id)
-    local sel = ToolUtil.GetSelectedTool(lp, "Pickaxe")
-    local key = (sel and sel:GetId() or "?") .. "|" .. tostring(id)
-    local c = oreSecCache[key]
-    if c ~= nil then return c or nil end
-    local name = ORE_DIR[id]
-    if not name then return nil end
-    local ok, d = pcall(function() return require(RS.__DIRECTORY.Blocks[name]) end)
-    if not ok or type(d) ~= "table" then return nil end
-    local ok2, dmg = pcall(PickaxeUtil.ComputeDamage, lp, sel, ToolUtil.GetBestTool(lp, "Pickaxe"), d)
-    local sec = (ok2 and dmg and dmg > 0) and ((d.Strength or 1) * 10 / dmg) or false
-    oreSecCache[key] = sec
-    return sec or nil
+    local b = oreSample[id]
+    if not valid(b) then return nil end
+    local sec = secNeeded(b, id)
+    if not sec or sec >= 999 then return nil end
+    return sec
 end
 S.OreSec = OreSec
 -- đổi loại quặng lúc đang chạy: getgenv()._OreSweep.SetOre("Amethyst", true) / .SetOres{ Sapphire=true, Rainbow=false }
@@ -356,7 +364,7 @@ S.SetOres = function(t)
 end
 
 local secCache, secPick = {}, nil
-local function secNeeded(b, id)
+function secNeeded(b, id)
     local sel = ToolUtil.GetSelectedTool(lp, "Pickaxe")
     local key = sel and sel:GetId() or "?"
     if key ~= secPick then secPick = key secCache = {} end
@@ -508,6 +516,7 @@ local function CollectOres(loc)
             total += 1
             local id = bid(b)
             if not seenAt[b] then seenAt[b] = now end
+            if isOreId(id) and not valid(oreSample[id]) then oreSample[id] = b end -- mẫu để UI tính "giây/cục" đúng bằng đường Mine dùng
             if wantOre(id) and now - seenAt[b] < minAge then young += 1 end -- quặng vừa respawn, chưa đủ tuổi -> đừng xoay khu, chờ nó
             if wantOre(id) and (skipUntil[b] or 0) >= now and secNeeded(b, id) <= (C["Max Sec"] or 20) and Exposed(loc, b) then
                 -- quặng đang skip (ghost 10 s / che 60 s) vẫn là quặng của khu này -> RotateZone không được coi khu là trống (VERIFIED 22/09: đổi khu rồi quay lại đào đúng cục vừa ghost)
@@ -1373,7 +1382,8 @@ local function UpdateUI()
             local on = C["Ores"][id] == true
             local sec = OreSec(id)
             local slow = sec and sec > maxSec
-            btn.Text = sec and ("%s\n%.1fs%s"):format(id, sec, slow and " !" or "") or id
+            local secTxt = sec and (sec < 1 and ("%.2fs"):format(sec) or ("%.1fs"):format(sec)) or "—" -- quặng nhanh 0.01-0.08 s: %.1f ra "0.0s"
+            btn.Text = ("%s\n%s%s"):format(id, secTxt, (sec and slow) and " !" or "")
             btn.TextColor3 = (not on) and UI.colors.off or (slow and UI.colors.warn or UI.colors.on)
             btn.BackgroundColor3 = on and Color3.fromRGB(22, 55, 32) or Color3.fromRGB(35, 30, 48)
         end
