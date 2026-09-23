@@ -18,7 +18,12 @@ local DEF = {
     ["Max Sec"]        = 90,       -- bỏ quặng cần > N giây (HP/damage). Helium-3 Pickaxe: Sapphire 0.13s, Emerald 0.2s, Amethyst 20.1s, Rainbow 80.6s
                                    -- -> 20 cũ loại luôn Amethyst (sát nút 20.1s!). Pickaxe yếu thì chính ngưỡng này tự loại quặng cứng, khỏi sửa Ores
     ["Min Ores"]       = 1,        -- có >= N quặng lộ mặt mới quét (3 cũ = đứng "chờ quặng" dù còn 1-2 cục ngay cạnh - VERIFIED 21/09)
-    ["Ore Age"]        = 2,        -- giây: quặng mới xuất hiện phải >= N giây mới đào (block kề stream về sau quặng -> tránh ghost)
+    ["Scan Every"]     = 0.35,     -- giây: giữa lượt quét lại TOÀN mine và nhét quặng mới respawn vào lượt đang chạy
+                                   -- (quét 9.7k block chỉ tốn ~7 ms - VERIFIED 23/09 - nên quét dày vẫn rẻ; bản cũ chốt danh sách 1 lần/lượt nên quặng mọc giữa lượt phải chờ hết lượt)
+    ["Idle Poll"]      = 0.4,      -- giây nghỉ khi mine chưa có quặng nào đào được (Idle Wait 5 s cũ = ngủ mù, quặng respawn xong vẫn nằm đó tới 5 s)
+    ["Ore Age"]        = 1.5,      -- giây: quặng mới xuất hiện phải >= N giây mới đào (block kề stream về sau quặng -> tránh ghost)
+                                   -- (23/09 hạ 2 -> 1.5: đo 4 cửa sổ 60 s, Age 1 = 247/165 quặng vs Age 2 = 119/186, fail 0-2 cả hai; server cạn thì nhánh "chờ quặng non" ăn tới 20-42% thời gian.
+                                   --  Nếu thấy fail ghost tăng thì trả về 2)
     ["Break Wait Min"] = 1.5,      -- giây chờ server xoá block sau khi client commit (server nhàn 0.1-0.3 s, server tải nặng đo được 1.5-4.3 s @ping 100 ms)
     ["Break Wait Max"] = 6,        -- trần cho ngưỡng tự học; hết ngần này mà Part còn = ghost thật (quặng server coi là bị chôn)
     ["Resync On Ghost"] = 6,       -- ghost liên tiếp N cục = bản mine của client lệch với server (block "ma": client còn, server đã xoá)
@@ -493,6 +498,11 @@ end
 -- 1 lượt: đứng đâu phá hết quặng trong tầm 39 ở đó (gần trước); hết -> tele tới quặng gần nhất còn lại
 local function Sweep(loc, list)
     local n = 0
+    -- quặng respawn liên tục: hết danh sách thì quét lại toàn mine và nhét cục mới vào chính lượt này,
+    -- thay vì trả về "done" rồi để vòng chính ngủ (VERIFIED 23/09: 1 lần quét ~7 ms cho 9.7k block)
+    local inList = {}
+    for _, e in ipairs(list) do inList[e.b] = true end
+    local lastScan = os.clock()
     while Alive() and C["Enabled"] do
         if loc.Destroyed or loc.Respawning then return n, "reset" end
         local hrp = HRP()
@@ -508,7 +518,21 @@ local function Sweep(loc, list)
             end
         end
         local e = best or farBest
-        if not e then return n, "done" end
+        if not e then
+            -- Hết danh sách: quét lại mine và nhét quặng mới vào chính lượt này. TUYỆT ĐỐI KHÔNG ngủ ở đây -
+            -- lượt kết thúc 1-2 lần/giây, bản thử ngủ 0.35 s mỗi lần làm tốc độ tụt 137 -> 69 quặng/phút (VERIFIED 23/09 A/B).
+            -- Chưa tới hạn quét thì trả về cho vòng chính (nó tự CollectOres ngay, không ngủ).
+            local scanEvery = tonumber(C["Scan Every"]) or 0.35
+            if scanEvery <= 0 or os.clock() - lastScan < scanEvery then return n, "done" end
+            lastScan = os.clock()
+            local fresh = CollectOres(loc) -- chỉ nhóm "nhanh": quặng chậm (Amethyst/Rainbow) để vòng chính lo, khỏi chặn lượt
+            local added = 0
+            for _, e2 in ipairs(fresh) do
+                if not inList[e2.b] then inList[e2.b] = true list[#list + 1] = e2 added += 1 end
+            end
+            if added > 0 then continue end
+            return n, "done"
+        end
         -- mặt lộ có thể đã bị lấp (mine respawn từng block) -> kiểm lại ngay trước khi đào
         if not Exposed(loc, e.b) then skipUntil[e.b] = now + 20 S.stats.buried += 1 continue end
         if not best then
@@ -1434,14 +1458,14 @@ task.spawn(function()
                 local t0 = os.clock()
                 local n, why = Sweep(loc, fast)
                 dbg("Lượt: %d quặng / %.0fs (%s)", n, os.clock() - t0, tostring(why))
-                if n == 0 and why == "done" then S.status = "chờ quặng đang skip" task.wait(1) end -- còn quặng nhưng đều đang skip -> nghỉ, không quay tít
+                if n == 0 and why == "done" then S.status = "chờ quặng đang skip" task.wait(math.clamp(tonumber(C["Idle Poll"]) or 0.4, 0.05, 5)) end -- còn quặng nhưng đều đang skip -> nghỉ, không quay tít
             elseif #slow > 0 and C["Slow Last"] then
                 local n, why = Sweep(loc, slow)
-                if n == 0 and why == "done" then S.status = "chờ quặng đang skip" task.wait(1) end
+                if n == 0 and why == "done" then S.status = "chờ quặng đang skip" task.wait(math.clamp(tonumber(C["Idle Poll"]) or 0.4, 0.05, 5)) end
             elseif C["Dig Buried"] and DigBuried(loc) then
                 return -- quặng đã lộ -> vòng sau sweep lấy
             elseif young > 0 then
-                S.status = ("chờ %d quặng mới load"):format(young) task.wait(0.5) -- mine respawn từng block: quặng non sắp đào được, không xoay khu
+                S.status = ("chờ %d quặng mới load"):format(young) task.wait(math.clamp(tonumber(C["Idle Poll"]) or 0.4, 0.05, 5)) -- mine respawn từng block: quặng non sắp đào được, không xoay khu
             elseif pendingAt and pendingAt - os.clock() < 15 then
                 S.status = ("chờ quặng skip %.0fs"):format(pendingAt - os.clock()) task.wait(math.clamp(pendingAt - os.clock() + 0.1, 0.2, 1)) -- quặng ghost/che sắp hết skip -> đợi, không đổi khu
             elseif C["Zone Rotate"] and RotateZone(loc) then
@@ -1450,10 +1474,10 @@ task.spawn(function()
                 return -- đang teleport sang server khác
             elseif C["Idle Mine"] then
                 local mined = IdleMine(loc, 20)
-                if mined == 0 then S.status = "chờ quặng" task.wait(C["Idle Wait"] or 5) end
+                if mined == 0 then S.status = "chờ quặng" task.wait(math.clamp(tonumber(C["Idle Poll"]) or 0.4, 0.05, 5)) end
             else
                 S.status = "chờ quặng"
-                task.wait(C["Idle Wait"] or 5)
+                task.wait(math.clamp(tonumber(C["Idle Poll"]) or 0.4, 0.05, 5)) -- poll nhanh: server cạn thì quặng respawn lắt nhắt, ngủ 5 s là mất lượt
             end
         end)
         if not ok then log("Lỗi: %s", tostring(err)) task.wait(2) end
