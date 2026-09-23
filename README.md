@@ -30,18 +30,20 @@ Dừng: phím `P` hoặc `getgenv()._OreSweep.Stop()`.
 
 ## Chọn loại quặng
 
-Trên dashboard có hàng nút 5 loại quặng, mỗi nút kèm **số giây phá 1 cục với pickaxe đang cầm**:
-bấm để bật/tắt ngay lúc đang chạy. Xanh = đang farm, xám = tắt, vàng kèm `!` = cần nhiều giây hơn `Max Sec` nên sẽ bị bỏ qua.
-
-Đổi bằng code cũng được:
-
 ```lua
-getgenv()._OreSweep.SetOre("Rainbow", false)                 -- tắt 1 loại
-getgenv()._OreSweep.SetOres{ Amethyst = true, Ruby = false } -- đổi nhiều loại
-getgenv()._OreSweep.OreSec("Amethyst")                       -- ~20.1 (giây/cục)
+getgenv().OreSweepConfig = { ["Ores"] = { Amethyst = true, Rainbow = true } } -- CHỈ farm 2 loại này
 ```
 
-Hoặc đặt sẵn lúc khởi động: `getgenv().OreSweepConfig = { ["Ores"] = { Sapphire = true, Ruby = true, Emerald = true, Amethyst = true, Rainbow = true } }`.
+Bảng `Ores` là danh sách trắng: ghi loại nào thì chỉ farm loại đó, loại không ghi coi như tắt.
+Gõ sai tên sẽ bị cảnh báo trong console. Tên hợp lệ: `Sapphire`, `Ruby`, `Emerald`, `Amethyst`, `Rainbow`.
+
+Đổi lúc đang chạy:
+
+```lua
+getgenv()._OreSweep.SetOre("Rainbow", false)
+getgenv()._OreSweep.SetOres{ Amethyst = true, Ruby = false }
+getgenv()._OreSweep.OreSec("Amethyst")   -- ~20.1 (giây/cục với pickaxe đang cầm)
+```
 
 ## Tham số hay dùng
 

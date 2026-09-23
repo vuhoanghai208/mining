@@ -332,7 +332,6 @@ local function Exposed(loc, b)
 end
 
 -- Bảng loại quặng: tên hiển thị -> module Directory, để tính "giây/cục" cho UI kể cả khi mine chưa có loại đó
-local ORE_ORDER = { "Sapphire", "Ruby", "Emerald", "Amethyst", "Rainbow" }
 local oreSample = setmetatable({}, { __mode = "v" }) -- [id] = 1 block đang load, để tính giây/cục
 local secNeeded -- khai báo trước: OreSec (ngay dưới) dùng, còn thân hàm nằm phía sau
 local ORE_DIR = {
@@ -1332,22 +1331,6 @@ if C["Show UI"] then
         UI.zone   = MkText("Zone 0  y=0", 18, C_DIM, false, 242, 28)
         UI.status = MkText("Status: init", 18, C_DIM, false, 276, 28)
         MkSep(316)
-        -- hàng nút chọn loại quặng: bấm là bật/tắt ngay, không cần chạy lại script
-        UI.colors = { on = C_GREEN, off = C_DIM, warn = C_GOLD }
-        UI.oreBtns = {}
-        local bw, gap = 92, 6
-        local totalW = #ORE_ORDER * bw + (#ORE_ORDER - 1) * gap
-        for i, id in ipairs(ORE_ORDER) do
-            local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(0, bw * sc, 0, 34 * sc)
-            btn.Position = UDim2.new(0.5, (-totalW / 2 + (i - 1) * (bw + gap)) * sc, 0, 326 * sc)
-            btn.BackgroundColor3 = Color3.fromRGB(30, 25, 50) btn.BorderSizePixel = 0
-            btn.Font = Enum.Font.GothamBold btn.TextSize = math.floor(14 * (black and 1 or 0.8))
-            btn.Text = id btn.TextColor3 = C_WHITE btn.ZIndex = 1001 btn.Parent = container
-            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-            btn.MouseButton1Click:Connect(function() S.SetOre(id, not C["Ores"][id]) end)
-            UI.oreBtns[id] = btn
-        end
 
         local toggleBtn = Instance.new("TextButton")
         toggleBtn.Size = UDim2.new(0, 36, 0, 36) toggleBtn.Position = UDim2.new(1, -48, 0, 10)
@@ -1376,18 +1359,6 @@ local function UpdateUI()
     UI.gems.Text   = GemLine("   ")
     UI.zone.Text   = ("Zone %d  y=%d"):format(z, y)
     UI.status.Text = "Status: " .. tostring(S.status)
-    if UI.oreBtns then
-        local maxSec = tonumber(C["Max Sec"]) or 90
-        for id, btn in pairs(UI.oreBtns) do
-            local on = C["Ores"][id] == true
-            local sec = OreSec(id)
-            local slow = sec and sec > maxSec
-            local secTxt = sec and (sec < 1 and ("%.2fs"):format(sec) or ("%.1fs"):format(sec)) or "—" -- quặng nhanh 0.01-0.08 s: %.1f ra "0.0s"
-            btn.Text = ("%s\n%s%s"):format(id, secTxt, (sec and slow) and " !" or "")
-            btn.TextColor3 = (not on) and UI.colors.off or (slow and UI.colors.warn or UI.colors.on)
-            btn.BackgroundColor3 = on and Color3.fromRGB(22, 55, 32) or Color3.fromRGB(35, 30, 48)
-        end
-    end
 end
 task.spawn(function()
     while Alive() do
