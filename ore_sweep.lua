@@ -11,7 +11,7 @@ local DEF = {
     ["Enabled"]        = true,
     ["Auto Join"]      = true,     -- tự vào event Space Mining nếu đang ở ngoài
     ["Target Zone"]    = 5,        -- khu muốn farm (1-5); tự hạ xuống khu cao nhất đã mở
-    ["Ores"]           = { Sapphire = true, Ruby = true, Emerald = true, Amethyst = true, Rainbow = true },
+    ["Ores"]           = { Sapphire = true, Ruby = true, Emerald = true, Amethyst = false, Rainbow = false },
                                    -- Sapphire->Moonstone, Ruby->Star Ruby, Emerald->Helium-3, Amethyst->Nebulite, Rainbow("Dark Matter Ore")->Dark Matter Gem + 5.000.000 SpaceCoins
                                    -- (VERIFIED 22/09: hold-patch PHÁ ĐƯỢC Amethyst/Rainbow - ghi chú cũ "server không cho phá" là của thời commit thủ công, đã sai.
                                    --  8 Amethyst -> 1 trong 180 s, Nebulite +8. Đáng: 1 Nebulite = 400 Moonstone = ~400 cục Sapphire; 1 Dark Matter = 20 Nebulite)
@@ -479,6 +479,9 @@ local function Mine(loc, b, sec)
         if b.TempBroken then
             S.hold = nil -- client đã commit, chờ server xoá
             tempAt = tempAt or os.clock()
+            -- ĐỪNG bỏ đoạn chờ này để "sang cục kế cho nhanh": 0.098 s đó là cửa sổ server xử lý lệnh phá,
+            -- latch cục mới trong lúc đó là HUỶ luôn cục đang vỡ. Thử rồi: 8 quặng/phút và 100% số cục
+            -- "thành công" bị verify bắt là ghost, so với 13-35 quặng/phút khi chờ đàng hoàng (A/B 23/09).
             if os.clock() - tempAt > GhostWait() then return false, "ghost" end
         else
             local me = loc.Players and loc.Players[lp]
