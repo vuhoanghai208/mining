@@ -28,6 +28,21 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/vuhoanghai208/mining/
 
 Dừng: phím `P` hoặc `getgenv()._OreSweep.Stop()`.
 
+## Chọn loại quặng
+
+Trên dashboard có hàng nút 5 loại quặng, mỗi nút kèm **số giây phá 1 cục với pickaxe đang cầm**:
+bấm để bật/tắt ngay lúc đang chạy. Xanh = đang farm, xám = tắt, vàng kèm `!` = cần nhiều giây hơn `Max Sec` nên sẽ bị bỏ qua.
+
+Đổi bằng code cũng được:
+
+```lua
+getgenv()._OreSweep.SetOre("Rainbow", false)                 -- tắt 1 loại
+getgenv()._OreSweep.SetOres{ Amethyst = true, Ruby = false } -- đổi nhiều loại
+getgenv()._OreSweep.OreSec("Amethyst")                       -- ~20.1 (giây/cục)
+```
+
+Hoặc đặt sẵn lúc khởi động: `getgenv().OreSweepConfig = { ["Ores"] = { Sapphire = true, Ruby = true, Emerald = true, Amethyst = true, Rainbow = true } }`.
+
 ## Tham số hay dùng
 
 | Key | Mặc định | Ý nghĩa |

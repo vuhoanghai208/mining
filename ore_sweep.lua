@@ -321,6 +321,40 @@ local function Exposed(loc, b)
     return false
 end
 
+-- Bảng loại quặng: tên hiển thị -> module Directory, để tính "giây/cục" cho UI kể cả khi mine chưa có loại đó
+local ORE_ORDER = { "Sapphire", "Ruby", "Emerald", "Amethyst", "Rainbow" }
+local ORE_DIR = {
+    Sapphire = "Ore 1 | Sapphire", Ruby = "Ore 2 | Ruby", Emerald = "Ore 3 | Emerald",
+    Amethyst = "Ore 4 | Amethyst", Rainbow = "Ore 5 | Rainbow", Quartz = "Ore 6 | Quartz",
+}
+local oreSecCache = {}
+local function OreSec(id)
+    local sel = ToolUtil.GetSelectedTool(lp, "Pickaxe")
+    local key = (sel and sel:GetId() or "?") .. "|" .. tostring(id)
+    local c = oreSecCache[key]
+    if c ~= nil then return c or nil end
+    local name = ORE_DIR[id]
+    if not name then return nil end
+    local ok, d = pcall(function() return require(RS.__DIRECTORY.Blocks[name]) end)
+    if not ok or type(d) ~= "table" then return nil end
+    local ok2, dmg = pcall(PickaxeUtil.ComputeDamage, lp, sel, ToolUtil.GetBestTool(lp, "Pickaxe"), d)
+    local sec = (ok2 and dmg and dmg > 0) and ((d.Strength or 1) * 10 / dmg) or false
+    oreSecCache[key] = sec
+    return sec or nil
+end
+S.OreSec = OreSec
+-- đổi loại quặng lúc đang chạy: getgenv()._OreSweep.SetOre("Amethyst", true) / .SetOres{ Sapphire=true, Rainbow=false }
+S.SetOre = function(id, on)
+    if ORE_DIR[id] == nil then return false, "không có loại quặng " .. tostring(id) end
+    C["Ores"][id] = on and true or false
+    log("Ore %s -> %s", id, tostring(C["Ores"][id]))
+    return true
+end
+S.SetOres = function(t)
+    for id, on in pairs(t or {}) do S.SetOre(id, on) end
+    return C["Ores"]
+end
+
 local secCache, secPick = {}, nil
 local function secNeeded(b, id)
     local sel = ToolUtil.GetSelectedTool(lp, "Pickaxe")
@@ -1289,6 +1323,22 @@ if C["Show UI"] then
         UI.zone   = MkText("Zone 0  y=0", 18, C_DIM, false, 242, 28)
         UI.status = MkText("Status: init", 18, C_DIM, false, 276, 28)
         MkSep(316)
+        -- hàng nút chọn loại quặng: bấm là bật/tắt ngay, không cần chạy lại script
+        UI.colors = { on = C_GREEN, off = C_DIM, warn = C_GOLD }
+        UI.oreBtns = {}
+        local bw, gap = 92, 6
+        local totalW = #ORE_ORDER * bw + (#ORE_ORDER - 1) * gap
+        for i, id in ipairs(ORE_ORDER) do
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(0, bw * sc, 0, 34 * sc)
+            btn.Position = UDim2.new(0.5, (-totalW / 2 + (i - 1) * (bw + gap)) * sc, 0, 326 * sc)
+            btn.BackgroundColor3 = Color3.fromRGB(30, 25, 50) btn.BorderSizePixel = 0
+            btn.Font = Enum.Font.GothamBold btn.TextSize = math.floor(14 * (black and 1 or 0.8))
+            btn.Text = id btn.TextColor3 = C_WHITE btn.ZIndex = 1001 btn.Parent = container
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+            btn.MouseButton1Click:Connect(function() S.SetOre(id, not C["Ores"][id]) end)
+            UI.oreBtns[id] = btn
+        end
 
         local toggleBtn = Instance.new("TextButton")
         toggleBtn.Size = UDim2.new(0, 36, 0, 36) toggleBtn.Position = UDim2.new(1, -48, 0, 10)
@@ -1317,6 +1367,17 @@ local function UpdateUI()
     UI.gems.Text   = GemLine("   ")
     UI.zone.Text   = ("Zone %d  y=%d"):format(z, y)
     UI.status.Text = "Status: " .. tostring(S.status)
+    if UI.oreBtns then
+        local maxSec = tonumber(C["Max Sec"]) or 90
+        for id, btn in pairs(UI.oreBtns) do
+            local on = C["Ores"][id] == true
+            local sec = OreSec(id)
+            local slow = sec and sec > maxSec
+            btn.Text = sec and ("%s\n%.1fs%s"):format(id, sec, slow and " !" or "") or id
+            btn.TextColor3 = (not on) and UI.colors.off or (slow and UI.colors.warn or UI.colors.on)
+            btn.BackgroundColor3 = on and Color3.fromRGB(22, 55, 32) or Color3.fromRGB(35, 30, 48)
+        end
+    end
 end
 task.spawn(function()
     while Alive() do
