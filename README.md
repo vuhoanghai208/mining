@@ -4,6 +4,8 @@ Space Mine Ore Sweep — script farm quặng cho Pet Simulator 99 (Space Mining 
 
 ## Dùng nhanh
 
+Đặt config **trước**, rồi gọi loader (loader không chứa config để bạn tự obfuscate thêm lớp nữa):
+
 ```lua
 getgenv().OreSweepConfig = {
     ["Target Zone"]      = 5,
@@ -13,6 +15,14 @@ getgenv().OreSweepConfig = {
     ["Auto Merchant"]    = true,
     ["Auto Free Gifts"]  = true,
 }
+loadstring(game:HttpGet("https://raw.githubusercontent.com/vuhoanghai208/mining/main/loader_enc.lua"))()
+```
+
+Không đặt `OreSweepConfig` cũng chạy được — script dùng mặc định trong file.
+
+Chạy thẳng không qua loader:
+
+```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/vuhoanghai208/mining/main/ore_sweep.lua"))()
 ```
 
